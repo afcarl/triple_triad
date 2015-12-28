@@ -13,6 +13,7 @@ class Game():
             Player(206, [Card.random_card() for _ in range(5)]),
             Player(220, [Card.random_card() for _ in range(5)])
         ]
+        self.cards = sum([p.cards for p in self.players], [])
         # random player goes first
         shuffle(self.players)
 
@@ -95,9 +96,14 @@ class Game():
             except Exception as e:
                 print('Error:', str(e))
                 continue
+
+            # check winner
+            if turn == self.rows * self.cols - 1:
+                self.winner = max(self.players, key=lambda p: len([c for c in self.cards if c.player == p]))
+
             turn += 1
             self.renderer.render()
-
+        print('Winner: Player {}'.format(self.players.index(self.winner)))
 
 class Player():
     def __init__(self, color, cards):
