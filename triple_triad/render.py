@@ -36,7 +36,7 @@ class Renderer():
     def _render_board(self):
         for row in range(self.game.rows):
             for col in range(self.game.cols):
-                card = self.game.board[row][col]
+                card = self.game.board[row, col]
                 if card is None:
                     color = 250 if (row + col) % 2 == 0 else 253
                     values = None
@@ -49,9 +49,9 @@ class Renderer():
         padding = 1
         y = self.cell_height * self.game.rows
         cell_mid = math.floor(self.cell_width/2)
-        for i, player in enumerate(self.game.players):
+        for player in self.game.players:
             y += padding
-            print(self.term.move(y, 0) + 'Player {}'.format(i+1))
+            print(self.term.move(y, 0) + '{}'.format(player))
             y += 1
             for j, card in enumerate(player.unplayed_cards):
                 self._draw_cell(j * (self.cell_width + 1), y, player.color, card.values)
