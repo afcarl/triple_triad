@@ -26,8 +26,11 @@ class Board():
 
 
 class Player():
-    def __init__(self, color):
+    def __init__(self, color, name):
+        self.name = name
         self.color = color
+
+    def draw_cards(self):
         self.cards = [Card.random_card() for _ in range(5)]
         for card in self.cards:
             card.player = self
@@ -37,7 +40,7 @@ class Player():
         return [c for c in self.cards if not c.played]
 
     def __str__(self):
-        return "Human Player"
+        return self.name
 
 
 class Card():

@@ -1,7 +1,6 @@
 """
 todo:
 
-- random
 - BFS
 - DFS
 - iterative deepening
@@ -12,22 +11,21 @@ todo:
 - alpha-beta
 - expectimax/expectiminimax
 - markov decision process
-
-implement way of playing many, many games against baseline:
-
-baseline strategy: play to win cards
 """
 
 import random
-from time import sleep
 from ..models import Player
+
 
 class AIPlayer(Player):
     strategies = ['baseline', 'random']
 
-    def decide(self, strategy, game):
-        sleep(random.randint(1, 2)) # "thinking"
-        return getattr(self, strategy)(game)
+    def __init__(self, color, name, strategy=None):
+        self.strategy = strategy
+        super().__init__(color, name)
+
+    def decide(self, game):
+        return getattr(self, self.strategy)(game)
 
     def baseline(self, game):
         """find the weakest card that will win the most cards"""
@@ -48,7 +46,5 @@ class AIPlayer(Player):
     def random(self, game):
         """play a random card in a random open position"""
         card = random.choice(self.unplayed_cards)
-        return card, random.choice(game.board.open_positions())
-
-    def __str__(self):
-        return "AI Player"
+        x, y = random.choice(game.board.open_positions())
+        return card, x, y

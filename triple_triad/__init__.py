@@ -4,6 +4,10 @@ from .models import Board, Player
 from .ai import AIPlayer
 
 
+class PlayerError(Exception):
+    pass
+
+
 class Game():
     """Triple Triad, with the plus, minus, same, and combo rules"""
 
@@ -11,51 +15,50 @@ class Game():
         self.rows = rows
         self.cols = cols
         self.board = Board(rows, cols)
-        self.players = [Player(228), AIPlayer(216)]
-        self.cards = sum([p.cards for p in self.players], [])
-
-        # random player goes first
-        shuffle(self.players)
-
         self.renderer = Renderer(self)
-        self.winner = None
 
     def play_card(self, card, x, y):
         if x >= self.cols or y >= self.rows:
-            raise Exception("Invalid board position")
+            raise PlayerError("Invalid board position")
         elif self.board[x, y] is not None:
-            raise Exception("Cannot place on an occupied space")
+            raise PlayerError("Cannot place on an occupied space")
         self.board[x, y] = card
         card.played = True
         for changed_card in self.resolve_around(card, x, y):
             changed_card.player = card.player
 
-    def resolve_around(self, card, x, y):
+    def _values_to_compare(self, x, y, card, side, seen):
+        if side == 'left':
+            adj_side = 'right'
+            x -= 1
+        elif side == 'right':
+            adj_side = 'left'
+            x += 1
+        elif side == 'top':
+            adj_side = 'bottom'
+            y -= 1
+        elif side == 'bottom':
+            adj_side = 'top'
+            y += 1
+
+        if x < 0 or x >= self.cols or y < 0 or y >= self.rows:
+            return None
+
+        pos = x, y
+        adj_card = self.board[pos]
+        if adj_card is not None and adj_card.player != card.player and adj_card not in seen:
+            return pos, getattr(card, side), getattr(adj_card, adj_side)
+
+    def resolve_around(self, card, x, y, seen=[]):
         """compute which cards change ownership for a card played at x,y"""
         changed_cards = []
 
         # look at adjacent cards
         values_to_compare = []
-        if x > 0:
-            pos = x-1, y
-            adj_card = self.board[pos]
-            if adj_card is not None and adj_card.player != card.player:
-                values_to_compare.append((pos, card.left, adj_card.right))
-        if x < self.cols - 1:
-            pos = x+1, y
-            adj_card = self.board[pos]
-            if adj_card is not None and adj_card.player != card.player:
-                values_to_compare.append((pos, card.right, adj_card.left))
-        if y > 0:
-            pos = x, y-1
-            adj_card = self.board[pos]
-            if adj_card is not None and adj_card.player != card.player:
-                values_to_compare.append((pos, card.top, adj_card.bottom))
-        if y < self.rows - 1:
-            pos = x, y+1
-            adj_card = self.board[pos]
-            if adj_card is not None and adj_card.player != card.player:
-                values_to_compare.append((pos, card.bottom, adj_card.top))
+        for side in ['left', 'right', 'top', 'bottom']:
+            to_compare = self._values_to_compare(x, y, card, side, seen)
+            if to_compare is not None:
+                values_to_compare.append(to_compare)
 
         if len(values_to_compare) > 1:
             combo_play = False
@@ -75,7 +78,7 @@ class Game():
             if combo_play:
                 for pos, this, other in values_to_compare:
                     changed_cards.append(self.board[pos])
-                    changed_cards.extend(self.resolve_around(card, *pos))
+                    changed_cards.extend(self.resolve_around(card, *pos, seen + changed_cards))
                 return changed_cards
 
         # otherwise, compare values
@@ -84,47 +87,72 @@ class Game():
                 changed_cards.append(self.board[pos])
         return changed_cards
 
-    def play(self):
+    def play(self, players=None, render=True):
         turn = 0
-        ai_strategy = None
-        self.renderer.render()
+        winner = None
 
-        while ai_strategy is None:
-            print('Choose AI strategy: {}'.format(AIPlayer.strategies))
-            ai_strategy = input('AI strategy:')
-            if ai_strategy not in AIPlayer.strategies:
-                ai_strategy = None
+        if players is None:
+            self.players = [
+                Player(228, "Human Player"),
+                AIPlayer(216, "AI Player")
+            ]
+        else:
+            self.players = players
 
+        # random player goes first
+        shuffle(self.players)
 
-        while self.winner is None:
+        if render: self.renderer.render()
+
+        for player in self.players:
+            player.draw_cards()
+
+            # select AI strategies
+            if isinstance(player, AIPlayer):
+                while player.strategy is None:
+                    print('Choose AI strategy: {}'.format(AIPlayer.strategies))
+                    player.strategy = input('AI strategy:')
+                    if player.strategy not in AIPlayer.strategies:
+                        player.strategy = None
+        self.cards = sum([p.cards for p in self.players], [])
+
+        while winner is None:
             p_idx = turn % 2
             player = self.players[p_idx]
-            print('\n{}\'s turn:'.format(player))
 
-            if isinstance(player, AIPlayer):
-                print("Thinking...")
-                card, x, y = player.decide(ai_strategy, self)
+            if render: print('\n{}\'s turn:'.format(player))
+
+            try:
+                if isinstance(player, AIPlayer):
+                    if render: print("Thinking...")
+                    card, x, y = player.decide(self)
+                else:
+                    card, x, y = self._human_turn(player)
+
                 self.play_card(card, x, y)
-
-            else:
-                card_idx = int(input('Card #:'))
-                if card_idx >= len(player.unplayed_cards):
-                    print('Error: Invalid card index')
-                    continue
-                x = int(input('x:'))
-                y = int(input('y:'))
-                card = player.unplayed_cards[card_idx]
-
-                try:
-                    self.play_card(card, x, y)
-                except Exception as e:
-                    print('Error:', str(e))
-                    continue
+            except PlayerError as e:
+                print('Error:', str(e))
+                continue
 
             # check winner
             if turn == self.rows * self.cols - 1:
-                self.winner = max(self.players, key=lambda p: len([c for c in self.cards if c.player == p]))
+                winner = self._get_winner()
 
             turn += 1
-            self.renderer.render()
-        print('Winner: {}'.format(self.winner))
+
+            if render: self.renderer.render()
+
+        if render: print('Winner: {}'.format(winner))
+        return winner
+
+    def _human_turn(self, player):
+        card_idx = int(input('Card #:'))
+        if card_idx >= len(player.unplayed_cards):
+            raise PlayerError('Error: Invalid card index')
+        x = int(input('x:'))
+        y = int(input('y:'))
+        card = player.unplayed_cards[card_idx]
+        return card, x, y
+
+    def _get_winner(self):
+        return max(self.players, key=lambda p: len([c for c in self.cards if c.player == p]))
